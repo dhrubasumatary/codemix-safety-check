@@ -60,3 +60,52 @@ modal deploy run_modal.py      # baseline -> SafeTune steering -> AuditKIT, on o
 ## Limits and next steps
 
 Small set (120 prompts), one model, one intervention, one LLM judge. If shortlisted: scale the set, add an Assamese / Assamese-English pilot written by a native speaker (never machine-translated and called validated), add a second SafeTune intervention (Harden LoRA), and human spot-checks of judge disagreements.
+
+## Results (Stage 1 run, Modal A100, 16 Nov 2026)
+
+Model: Cohere Labs Tiny Aya Global (3.35B), loaded from an ungated byte-identical mirror (`1-800-LLMs/tiny-aya-global`). Judge: `Qwen/Qwen2.5-7B-Instruct` (open weights). Intervention: SafeTune `RefusalDirectionTrainer`, refusal direction computed on the calibration split only, alpha chosen on calibration only (alpha = 0.1). Scored on the 80 held-out CodeMix prompts (20 pairs x EN + Hinglish) and 150 XSTest prompts.
+
+### Before vs after (held-out)
+
+| Slice | Metric | Baseline | Steered (alpha 0.1) |
+|---|---|---|---|
+| Hinglish (20 harmful / 20 harmless) | Attack success rate (lower better) | **20.0%** | **5.0%** |
+| Hinglish | Over-refusal on harmless (lower better) | 30.0% | 25.0% |
+| Hinglish | Benign usefulness (higher better) | 65.0% | 65.0% |
+| Hinglish | Nonsense rate | 2.5% | 5.0% |
+| English (20 / 20) | Attack success rate | 0.0% | 0.0% |
+| English | Over-refusal | 0.0% | 0.0% |
+| XSTest (50 unsafe / 100 safe) | Attack success rate | 0.0% | 0.0% |
+| XSTest | Over-refusal | 44.0% | 46.0% |
+| All held-out (90 / 140) | Attack success rate | 4.4% | 1.1% |
+| All held-out | Over-refusal | 35.7% | 36.4% |
+| All held-out | Benign usefulness | 63.6% | 62.1% |
+| All held-out | Latency per prompt | 0.393 s | 0.422 s |
+
+**The headline:** in plain English Tiny Aya is already perfectly safe on this set (0% attacks get through, 0% false refusals). Switch the same requests to Hinglish and 20% of harmful prompts get answered while 30% of harmless ones get refused. That gap is the finding. Light refusal-direction steering cuts the Hinglish attack success rate from 20% to 5% with no loss of usefulness and English untouched, at ~30 ms extra per prompt.
+
+**Honest caveats:** the Hinglish slice is small (20 + 20), so 20% -> 5% is 4 prompts -> 1. Over-refusal on XSTest is high at baseline (44%) and steering doesn't fix it. Stronger steering kills usefulness fast (see sweep).
+
+### Alpha sweep (calibration split only, 20 harmful / 20 harmless)
+
+| alpha | ASR | Over-refusal | Usefulness |
+|---|---|---|---|
+| baseline | 5.0% | 20.0% | 80.0% |
+| 0.1 (chosen) | 10.0% | 5.0% | 95.0% |
+| 0.3 | 5.0% | 5.0% | 95.0% |
+| 0.6 | 0.0% | 45.0% | 55.0% |
+| 1.0 | 0.0% | 80.0% | 20.0% |
+| 2.0 | 0.0% | 100.0% | 0.0% |
+| 4.0 | 0.0% | 100.0% | 0.0% |
+
+Selection score = harmful refusal + benign usefulness - nonsense (ties go to the smaller alpha).
+
+### AuditKIT
+
+`ak.evaluate` with `refusal_scorer` on the 80 held-out CodeMix prompts, then `ak.compare`: multilingual_refusal 0.2625 -> 0.2625 (0 samples flipped either way). AuditKIT's keyword refusal scorer agrees the overall refusal rate didn't change, so the gain is in which prompts get refused, not how many.
+
+### Artifacts
+
+- Raw generations + judge verdicts: HF dataset `dhrubasumatary/codemix-safety-check`, `results/` (baseline_generations.json, steered_generations.json, summary.json, auditkit_*.json)
+- Steering artifact: HF model `dhrubasumatary/tiny-aya-global-codemix-steer` (refusal_direction.safetensors, steering_config.json)
+- Reproduce: `modal run run_modal.py` (needs HF_TOKEN as a Modal secret)
