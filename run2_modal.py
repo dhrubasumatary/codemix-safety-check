@@ -131,7 +131,7 @@ def run(rows: list):
             texts = [tok.apply_chat_template([{"role": "user", "content": p}], add_generation_prompt=True, tokenize=False) for p in b]
             enc = tok(texts, return_tensors="pt", padding=True, add_special_tokens=False).to("cuda")
             t = time.time()
-            with (ctx if ctx is not None else contextlib.nullcontext()):
+            with (ctx() if ctx is not None else contextlib.nullcontext()):
                 with torch.no_grad():
                     o = model.generate(**enc, max_new_tokens=max_new, do_sample=False, pad_token_id=tok.pad_token_id)
             dt = (time.time() - t) / len(b)
@@ -177,7 +177,10 @@ def run(rows: list):
 
     # Hinglish XSTest: same 150 eval prompts rewritten in Hinglish by the judge model
     log("translating xstest -> hinglish")
-    tr = jgen([TRANS_PROMPT.format(p=r["instruction"]) for r in xs_eval], 160)
+    C1 = "/out/run2/xstest_hinglish.json"
+    cmap = {x["id"][:-3]: x["instruction"] for x in json.load(open(C1))} if os.path.exists(C1) else {}
+    log("cached hinglish", len(cmap))
+    tr = [cmap.get(r["id"], "") for r in xs_eval] if cmap else jgen([TRANS_PROMPT.format(p=r["instruction"]) for r in xs_eval], 160)
     xs_hi = []
     for r, t in zip(xs_eval, tr):
         t = t.strip().strip('"').strip()
@@ -188,10 +191,19 @@ def run(rows: list):
     devset = calib + xs_dev
     log("eval", len(evalset), "dev", len(devset))
 
-    base_items, base_m = run_set(evalset, None, "baseline")
+    BP = "/out/run2/baseline_generations.json"
+    if os.path.exists(BP):
+        base_items = json.load(open(BP)); base_m = metrics(base_items); log("cached baseline", len(base_items))
+    else:
+        base_items, base_m = run_set(evalset, None, "baseline")
     save("baseline_generations.json", base_items); summary["baseline"] = base_m
     log("BASELINE", json.dumps(base_m["all"]), "hinglish", json.dumps(base_m.get("hinglish")), "xs_hi", json.dumps(base_m.get("xstest_hinglish")))
-    bdev_items, bdev_m = run_set(devset, None, "baseline_dev")
+    BD = "/out/run2/baseline_dev_generations.json"
+    if os.path.exists(BD):
+        bdev_items = json.load(open(BD)); bdev_m = metrics(bdev_items); log("cached baseline_dev")
+    else:
+        bdev_items, bdev_m = run_set(devset, None, "baseline_dev")
+        save("baseline_dev_generations.json", bdev_items)
     summary["baseline_dev"] = bdev_m["all"]; summary["baseline_dev_score"] = score(bdev_m["all"])
     base_dev_resp = [x["response"] for x in bdev_items]
     save("summary.json", summary)
@@ -217,7 +229,7 @@ def run(rows: list):
         for s in grid:
             try:
                 trn, w = build(name, s)
-                items, m = run_set(devset, steer_ctx(w), f"{name}_{s}")
+                items, m = run_set(devset, (lambda w=w: steer_ctx(w)), f"{name}_{s}")
                 same = sum(a == b for a, b in zip(base_dev_resp, [x["response"] for x in items])) / len(items)
                 sc = score(m["all"])
                 summary["sweep"][f"{name}@{s}"] = dict(dev=m["all"], score=sc, identical_to_baseline=round(same, 3))
@@ -233,7 +245,7 @@ def run(rows: list):
             log("no working strength for", name); continue
         try:
             trn, w = build(name, best[1])
-            items, m = run_set(evalset, steer_ctx(w), f"{name}_{best[1]}_heldout")
+            items, m = run_set(evalset, (lambda w=w: steer_ctx(w)), f"{name}_{best[1]}_heldout")
             save(f"steered_{name}.json", items)
             summary["methods"][name] = dict(strength=best[1], dev_score=best[0], heldout=m)
             log("HELDOUT", name, best[1], json.dumps(m["all"]), "hinglish", json.dumps(m.get("hinglish")), "xs_hi", json.dumps(m.get("xstest_hinglish")))
