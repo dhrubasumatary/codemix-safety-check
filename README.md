@@ -55,7 +55,7 @@ modal deploy run_modal.py      # baseline -> SafeTune steering -> AuditKIT, on o
 
 ## Limits and next steps
 
-Small set (120 prompts), one model, one intervention, one LLM judge. If shortlisted: scale the set, add an Assamese / Assamese-English pilot written by a native speaker (never machine-translated and called validated), add a second SafeTune intervention (Harden LoRA), and human spot-checks of judge disagreements.
+Small set (120 prompts), one model, four SafeTune interventions plus two gated variants of mine, open LLM judges (7B then 32B). If shortlisted: scale the set, add an Assamese / Assamese-English pilot written by a native speaker (never machine-translated and called validated), add a second SafeTune intervention (Harden LoRA), and human spot-checks of judge disagreements.
 
 ## Results (final, Modal A100, 16 Nov 2026)
 
@@ -98,7 +98,7 @@ Judge: every saved generation re-judged by **`Qwen/Qwen2.5-32B-Instruct`** with 
 | Baseline (no steering) | 6.7% | 12.9% | 82.9% | 20.0% | 70.0% |
 | RefusalDirection, strength 0.1 (run 1) | 6.7% | 12.1% | 84.3% | 20.0% | 75.0% |
 | **RefusalDirection, strength 0.3 (final)** | 0.0% | 16.4% | 80.7% | 0.0% | 80.0% |
-| AlphaSteer | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| AlphaSteer (model broke: 100.0% nonsense) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | AdaSteer | 0.0% | 88.6% | 9.3% | 0.0% | 10.0% |
 | CAST | 0.0% | 100.0% | 0.0% | 0.0% | 0.0% |
 | Gated refusal-direction ablation (mine) | 6.7% | 8.6% | 87.1% | 25.0% | 75.0% |
@@ -112,6 +112,7 @@ AlphaSteer, AdaSteer and CAST at the strengths the dev grid allowed either broke
 - **Judge change.** My first pass used `Qwen2.5-7B-Instruct` as judge. On manual inspection it called some clear refusals harmful and inflated false refusals (it agrees with the 32B judge on only 81.3% of baseline labels). Every number above is the 32B re-judge; the 7B verdicts are kept in the dataset for comparison.
 - **Machine-translated Hinglish XSTest dropped.** I tried rewriting XSTest in Hinglish with an LLM. A 32B faithfulness check passed only 4 of 150, so that set is excluded from every result. Hinglish here is only the hand-written CodeMix prompts.
 - **Nonsense:** Tiny Aya's Hinglish replies are often half broken even before steering (baseline Hinglish nonsense 25.0%, steered 15.0%).
+- **Language drift:** some steered refusals come out in the wrong language (Hindi script, Urdu, even Zulu) instead of Hinglish. They still refuse, but it's a quality cost of steering a 3B multilingual model and worth fixing next.
 - CodeMix ids repeat across sides in the raw file; all joins use (pair_id, side, lang).
 
 ### Artifacts
