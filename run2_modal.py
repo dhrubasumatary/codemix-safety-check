@@ -166,7 +166,11 @@ def run(rows: list):
 
     def run_set(rs, ctx, tag):
         ps = [r["instruction"] for r in rs]
-        outs, lat = gen(ps, ctx)
+        if ctx is None:
+            outs, lat = gen(ps, None)
+        else:
+            with ctx():  # enter steering ONCE per set (wrapper is single-use)
+                outs, lat = gen(ps, None)
         js = judge_all(ps, outs)
         items = [dict(r, response=o, latency_s=l, judge=j, condition=tag) for r, o, l, j in zip(rs, outs, lat, js)]
         return items, metrics(items)
@@ -221,6 +225,7 @@ def run(rows: list):
         clear_hooks()
         trn = getattr(steer, name)(model, tok, alpha=s)
         w, _ = trn.calibrate(harmful=harmful, harmless=harmless)
+        log("wrapped", name, type(w).__name__, hasattr(w, "register_hooks"), hasattr(w, "__enter__"))
         return trn, w
 
     summary["sweep"] = {}; summary["methods"] = {}
