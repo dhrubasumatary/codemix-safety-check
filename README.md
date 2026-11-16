@@ -13,7 +13,7 @@ CodeMix Safety Check is a small, honest, reproducible benchmark plus a repair te
 - **Method:** SafeTune `RefusalDirectionTrainer`, strength 0.3, inference-time steering, weights unchanged. Picked on a dev split, then frozen.
 - **Held-out (230 prompts):** harmful replies 4/90 -> 0/90, harmless wrongly refused 12/140 -> 21/140, harmless helpful 128/140 -> 124/140.
 - **Fresh Hinglish set (80 new prompts, frozen and published before any generation):** harmful replies 9/40 -> 2/40, wrongly refused 0/40 -> 3/40, helpful 35/40 -> 33/40.
-- **The trade-off is real:** steering cuts harmful completions on code-mixed prompts and costs some over-refusal and usefulness. All numbers are LLM-judge estimates with known errors (listed below), not certified safety.
+- **The trade-off is real:** the judge flags fewer code-mixed completions as harmful after steering and costs some over-refusal and usefulness. All numbers are LLM-judge estimates with known errors (listed below), not certified safety.
 
 ## Data
 
@@ -21,7 +21,7 @@ CodeMix Safety Check is a small, honest, reproducible benchmark plus a repair te
 2. **Fresh Hinglish validation** (`validation/hinglish_fresh.jsonl`): 40 new harmful/harmless pairs = 80 prompts, written after the method was frozen. SHA-256 `a82f44e25c350acefbaac48767b8d6bb2c65240f4acaaa58dccdc07b7481a588`, pushed to GitHub and HF before a single generation. Run once with the frozen steer, no tuning.
 3. **Dropped:** a machine-translated Hinglish XSTest. A 32B faithfulness check passed only 4 of 150 translations, so it's excluded from every headline number.
 
-Prompts are newly written by me with AI assistance, **not native-speaker validated**, and contain no private user data. The fresh set's topics may overlap the exploratory set's categories.
+Prompts are **assistant-authored for this project, not native-speaker validated**, and contain no private user data. The fresh set's topics may overlap the exploratory set's categories.
 
 ## Pipeline (three Lexsi repos chained)
 
@@ -102,7 +102,7 @@ Prompts are newly written by me with AI assistance, **not native-speaker validat
 ## What this does and doesn't show
 
 - **Judge estimates, not verified ASR.** Reading the flagged items by hand, the 32B judge still has false positives in both conditions: a SIM-unlock misunderstanding, a reply about collecting evidence and a garbled reply were all flagged harmful. There may be false negatives too. Every reply and label is public so anyone can re-judge.
-- **The cost is real:** more harmless prompts get refused after steering, and degenerate replies go up slightly. Tiny Aya also drifts into Devanagari or a different language in some replies.
+- **The cost is real:** more harmless prompts get refused after steering, and degenerate replies decrease on the exploratory slice but increase on the fresh slice. Tiny Aya also drifts into Devanagari or a different language in some replies.
 - **Small slices.** 230 held-out plus 80 fresh prompts. Treat differences of a few prompts as noise.
 - **Selection.** Strength was picked on dev, but I looked at held-out numbers for several methods during exploration, so the fresh set is the cleaner test.
 - **Judge history.** A 7B first-pass judge miscounted refusals badly, and an intermediate 32B two-label rubric conflated safe support with refusal. Both are kept in `results/` for transparency and superseded by the four-label audit above.
@@ -115,6 +115,8 @@ Under the intermediate 32B rubric on the same held-out 230: RefusalDirection 0.1
 
 ## Reproduce
 
+GPU regeneration requires your own Modal account and HF write token, and incurs GPU charges. The AuditKIT replay only reads the pinned public labels and can run locally without model generation. Scripts retain intermediate scoring for transparency; final headline labels are only those in `results/score_audit/`. Dependencies currently follow upstream versions rather than a fully locked environment, so exact bitwise reproduction is not guaranteed.
+
 ```bash
 pip install "git+https://github.com/Lexsi-Labs/CuratorKIT"
 curatorkit run curation/pipeline.yaml --output-dir curation/out/
@@ -123,7 +125,7 @@ curatorkit run validation/curation/pipeline.yaml --output-dir validation/curatio
 pip install modal && modal setup
 modal secret create codemix-hf HF_TOKEN=<your token>
 modal run run2_modal.py                 # baseline + method sweep on dev + held-out eval (A100-80GB)
-modal run run_fresh_modal.py            # frozen RD 0.3 on the fresh Hinglish set
+modal run --detach run_fresh_modal.py            # frozen RD 0.3 on the fresh Hinglish set
 modal run --detach score_audit_modal.py # blinded four-label 32B scoring
 
 pip install "git+https://github.com/Lexsi-Labs/AuditKIT"
@@ -140,4 +142,4 @@ python replay_auditkit.py               # AuditKIT evaluate + compare on the fro
 
 ## Next
 
-Native-speaker Hinglish and Assamese sets, a human-labelled subset to calibrate the judge, and conditional steering that keeps the safety gain without the refusal cost.
+Native-speaker Hinglish and Assamese sets, an independently human-labelled subset to calibrate the judge, and conditional steering that keeps the safety gain without the refusal cost.
