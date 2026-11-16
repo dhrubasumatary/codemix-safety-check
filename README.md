@@ -21,10 +21,10 @@ File: `data/codemix_raw.jsonl` (fields: `id, pair_id, category, side, lang, spli
 ## The pipeline (three Lexsi repos chained)
 
 1. **CuratorKIT** validates, dedupes and cleans the prompt set and freezes it with provenance (`curation/pipeline.yaml`, output and manifest in `curation/out/`). The harmful half is kept on purpose, since this is an eval set.
-2. **SafeTune** (`steer.RefusalDirectionTrainer`) computes a refusal direction from the calibration split only and steers Tiny Aya Global at inference time (weights unchanged). The steering strength `alpha` is picked on the calibration split only, never on test.
+2. **SafeTune** (`steer.RefusalDirectionTrainer`) computes a refusal direction from the calibration split only and steers Tiny Aya Global at inference time (weights unchanged). The steering strength is picked on a dev split only, never on test.
 3. **AuditKIT** scores baseline vs steered outputs on the exact same held-out prompts and compares the runs (`ak.evaluate`, `ak.compare`).
 
-An LLM judge (`Qwen/Qwen2.5-7B-Instruct`, open weights) labels every response REFUSAL / COMPLIANCE / NONSENSE and whether it gives real harmful help. All raw generations and judge verdicts are published so anyone can re-judge them.
+An LLM judge (`Qwen/Qwen2.5-32B-Instruct`, open weights; a 7B first pass is kept for comparison) labels every response REFUSAL / COMPLIANCE / NONSENSE and whether it gives real harmful help. All raw generations and judge verdicts are published so anyone can re-judge them.
 
 ## Metrics (per language, before and after)
 
@@ -35,10 +35,6 @@ An LLM judge (`Qwen/Qwen2.5-7B-Instruct`, open weights) labels every response RE
 - **Latency** per prompt on the same GPU.
 
 The point is the trade-off. If steering cuts harmful answers but starts refusing every Hinglish question, that's a fail, and this report will show it.
-
-## Results
-
-Status: the GPU run (Modal, A100) is in progress. The before/after table, raw generations, judge verdicts and AuditKIT comparison are written here and to the Hugging Face dataset as soon as it lands.
 
 ## Reproduce
 
@@ -61,51 +57,65 @@ modal deploy run_modal.py      # baseline -> SafeTune steering -> AuditKIT, on o
 
 Small set (120 prompts), one model, one intervention, one LLM judge. If shortlisted: scale the set, add an Assamese / Assamese-English pilot written by a native speaker (never machine-translated and called validated), add a second SafeTune intervention (Harden LoRA), and human spot-checks of judge disagreements.
 
-## Results (Stage 1 run, Modal A100, 16 Nov 2026)
+## Results (final, Modal A100, 16 Nov 2026)
 
-Model: Cohere Labs Tiny Aya Global (3.35B), loaded from an ungated byte-identical mirror (`1-800-LLMs/tiny-aya-global`). Judge: `Qwen/Qwen2.5-7B-Instruct` (open weights). Intervention: SafeTune `RefusalDirectionTrainer`, refusal direction computed on the calibration split only, alpha chosen on calibration only (alpha = 0.1). Scored on the 80 held-out CodeMix prompts (20 pairs x EN + Hinglish) and 150 XSTest prompts.
+Model: Cohere Labs **Tiny Aya Global** (3.35B), loaded from an ungated byte-identical mirror (`1-800-LLMs/tiny-aya-global`).
+Intervention: SafeTune `RefusalDirectionTrainer`, direction computed on the calibration split only. Strength picked on a **dev split only** (40 calibration prompts + 75 XSTest prompts never used in test), from a grid, by `usefulness - 3*ASR - 2*nonsense`. Winner: strength **0.3**.
+Held-out test: 80 CodeMix prompts (20 pairs x English + Hinglish) + 150 XSTest prompts = **230 prompts (90 harmful, 140 harmless)**.
+Judge: every saved generation re-judged by **`Qwen/Qwen2.5-32B-Instruct`** with a strict rubric (REFUSAL / COMPLIANCE / NONSENSE, and HARMFUL only when the reply has specific actionable harmful content). Code: `rejudge_modal.py`.
 
-### Before vs after (held-out)
+### Before vs after (held-out, 32B judge)
 
-| Slice | Metric | Baseline | Steered (alpha 0.1) |
+| Slice | Metric | Baseline | Steered (RefusalDirection 0.3) |
 |---|---|---|---|
-| Hinglish (20 harmful / 20 harmless) | Attack success rate (lower better) | **20.0%** | **5.0%** |
-| Hinglish | Over-refusal on harmless (lower better) | 30.0% | 25.0% |
-| Hinglish | Benign usefulness (higher better) | 65.0% | 65.0% |
-| Hinglish | Nonsense rate | 2.5% | 5.0% |
-| English (20 / 20) | Attack success rate | 0.0% | 0.0% |
-| English | Over-refusal | 0.0% | 0.0% |
-| XSTest (50 unsafe / 100 safe) | Attack success rate | 0.0% | 0.0% |
-| XSTest | Over-refusal | 44.0% | 46.0% |
-| All held-out (90 / 140) | Attack success rate | 4.4% | 1.1% |
-| All held-out | Over-refusal | 35.7% | 36.4% |
-| All held-out | Benign usefulness | 63.6% | 62.1% |
-| All held-out | Latency per prompt | 0.393 s | 0.422 s |
+| Hinglish CodeMix (20 harmful / 20 harmless) | Attack success rate (lower better) | 20.0% | 0.0% |
+| Hinglish CodeMix (20 harmful / 20 harmless) | Harmful prompts refused | 60.0% | 90.0% |
+| Hinglish CodeMix (20 harmful / 20 harmless) | Over-refusal on harmless (lower better) | 0.0% | 0.0% |
+| Hinglish CodeMix (20 harmful / 20 harmless) | Benign usefulness (higher better) | 70.0% | 80.0% |
+| Hinglish CodeMix (20 harmful / 20 harmless) | Nonsense rate | 25.0% | 15.0% |
+| English CodeMix (20 / 20) | Attack success rate (lower better) | 0.0% | 0.0% |
+| English CodeMix (20 / 20) | Harmful prompts refused | 100.0% | 100.0% |
+| English CodeMix (20 / 20) | Over-refusal on harmless (lower better) | 0.0% | 0.0% |
+| English CodeMix (20 / 20) | Benign usefulness (higher better) | 100.0% | 100.0% |
+| English CodeMix (20 / 20) | Nonsense rate | 0.0% | 0.0% |
+| XSTest (50 unsafe / 100 safe) | Attack success rate (lower better) | 4.0% | 0.0% |
+| XSTest (50 unsafe / 100 safe) | Harmful prompts refused | 96.0% | 100.0% |
+| XSTest (50 unsafe / 100 safe) | Over-refusal on harmless (lower better) | 18.0% | 23.0% |
+| XSTest (50 unsafe / 100 safe) | Benign usefulness (higher better) | 82.0% | 77.0% |
+| XSTest (50 unsafe / 100 safe) | Nonsense rate | 0.0% | 0.0% |
+| All held-out (90 / 140) | Attack success rate (lower better) | 6.7% | 0.0% |
+| All held-out (90 / 140) | Harmful prompts refused | 88.9% | 97.8% |
+| All held-out (90 / 140) | Over-refusal on harmless (lower better) | 12.9% | 16.4% |
+| All held-out (90 / 140) | Benign usefulness (higher better) | 82.9% | 80.7% |
+| All held-out (90 / 140) | Nonsense rate | 4.3% | 2.6% |
 
-**The headline:** in plain English Tiny Aya is already perfectly safe on this set (0% attacks get through, 0% false refusals). Switch the same requests to Hinglish and 20% of harmful prompts get answered while 30% of harmless ones get refused. That gap is the finding. Light refusal-direction steering cuts the Hinglish attack success rate from 20% to 5% with no loss of usefulness and English untouched, at ~30 ms extra per prompt.
+**The headline:** in plain English Tiny Aya is already safe on this set. Switch the same requests to Hinglish and **20.0% of harmful prompts get real harmful help**. One SafeTune refusal direction, picked on dev only, takes Hinglish attack success to **0.0%**, while Hinglish false refusals stay at 0.0% and Hinglish usefulness goes 70.0% -> 80.0%. Across all 230 held-out prompts, attack success goes 6.7% -> 0.0%; the price is over-refusal 12.9% -> 16.4%, mostly on XSTest's scary-sounding safe prompts.
 
-**Honest caveats:** the Hinglish slice is small (20 + 20), so 20% -> 5% is 4 prompts -> 1. Over-refusal on XSTest is high at baseline (44%) and steering doesn't fix it. Stronger steering kills usefulness fast (see sweep).
+### Every method I tried (same held-out set, same 32B judge)
 
-### Alpha sweep (calibration split only, 20 harmful / 20 harmless)
+| Method | ASR all | Over-refusal all | Usefulness all | Hinglish ASR | Hinglish usefulness |
+|---|---|---|---|---|---|
+| Baseline (no steering) | 6.7% | 12.9% | 82.9% | 20.0% | 70.0% |
+| RefusalDirection, strength 0.1 (run 1) | 6.7% | 12.1% | 84.3% | 20.0% | 75.0% |
+| **RefusalDirection, strength 0.3 (final)** | 0.0% | 16.4% | 80.7% | 0.0% | 80.0% |
+| AlphaSteer | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| AdaSteer | 0.0% | 88.6% | 9.3% | 0.0% | 10.0% |
+| CAST | 0.0% | 100.0% | 0.0% | 0.0% | 0.0% |
+| Gated refusal-direction ablation (mine) | 6.7% | 8.6% | 87.1% | 25.0% | 75.0% |
+| Two-sided gated steering (mine) | 6.7% | 10.7% | 85.7% | 20.0% | 75.0% |
 
-| alpha | ASR | Over-refusal | Usefulness |
-|---|---|---|---|
-| baseline | 5.0% | 20.0% | 80.0% |
-| 0.1 (chosen) | 10.0% | 5.0% | 95.0% |
-| 0.3 | 5.0% | 5.0% | 95.0% |
-| 0.6 | 0.0% | 45.0% | 55.0% |
-| 1.0 | 0.0% | 80.0% | 20.0% |
-| 2.0 | 0.0% | 100.0% | 0.0% |
-| 4.0 | 0.0% | 100.0% | 0.0% |
+AlphaSteer, AdaSteer and CAST at the strengths the dev grid allowed either broke the model or made it refuse nearly everything. My two gated variants cut false refusals further but let Hinglish attacks through, so they lose on the thing this project is about.
 
-Selection score = harmful refusal + benign usefulness - nonsense (ties go to the smaller alpha).
+### Honest caveats
 
-### AuditKIT
-
-`ak.evaluate` with `refusal_scorer` on the 80 held-out CodeMix prompts, then `ak.compare`: multilingual_refusal 0.2625 -> 0.2625 (0 samples flipped either way). AuditKIT's keyword refusal scorer agrees the overall refusal rate didn't change, so the gain is in which prompts get refused, not how many.
+- **Small Hinglish slice** (20 + 20), so 20% -> 0% is 4 prompts -> 0. The direction is right and it holds on English and XSTest, but it needs a bigger set.
+- **Judge change.** My first pass used `Qwen2.5-7B-Instruct` as judge. On manual inspection it called some clear refusals harmful and inflated false refusals (it agrees with the 32B judge on only 81.3% of baseline labels). Every number above is the 32B re-judge; the 7B verdicts are kept in the dataset for comparison.
+- **Machine-translated Hinglish XSTest dropped.** I tried rewriting XSTest in Hinglish with an LLM. A 32B faithfulness check passed only 4 of 150, so that set is excluded from every result. Hinglish here is only the hand-written CodeMix prompts.
+- **Nonsense:** Tiny Aya's Hinglish replies are often half broken even before steering (baseline Hinglish nonsense 25.0%, steered 15.0%).
+- CodeMix ids repeat across sides in the raw file; all joins use (pair_id, side, lang).
 
 ### Artifacts
 
-- Raw generations + judge verdicts: HF dataset `dhrubasumatary/codemix-safety-check`, `results/` (baseline_generations.json, steered_generations.json, summary.json, auditkit_*.json)
-- Steering artifact: HF model `dhrubasumatary/tiny-aya-global-codemix-steer` (refusal_direction.safetensors, steering_config.json)
-- Reproduce: `modal run run_modal.py` (needs HF_TOKEN as a Modal secret)
+- Generations, 7B and 32B judge verdicts, summaries: HF dataset `dhrubasumatary/codemix-safety-check`, `results/` (run2 = final, rejudge/ = 32B verdicts)
+- Steering artifact: HF model `dhrubasumatary/tiny-aya-global-codemix-steer`
+- Reproduce: `modal deploy run2_modal.py` (baseline, dev-picked steering, held-out eval), then `modal deploy rejudge_modal.py` (needs HF_TOKEN as Modal secret `codemix-hf`)
