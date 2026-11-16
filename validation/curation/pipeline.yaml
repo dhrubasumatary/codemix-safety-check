@@ -1,0 +1,27 @@
+# CuratorKIT stage of CodeMix Safety Check.
+# This is an eval set, so the harmful half is kept on purpose: we validate,
+# dedupe and clean only. Every rejected row would land in rejected.jsonl.
+name: hinglish_fresh_curation
+version: "1.0.0"
+readers:
+  - type: jsonl
+    path: validation/hinglish_fresh.jsonl
+    format: auto
+gates:
+  - type: schema
+    required_fields:
+      - instruction
+    min_tokens: 3
+    max_tokens: 512
+    use_tiktoken: false
+normalizers:
+  - type: exact_dedup
+  - type: text_cleaner
+    transforms:
+      strip_html: true
+      normalise_unicode: true
+      fix_encoding_artifacts: true
+      collapse_whitespace: true
+      remove_control_chars: true
+exporters:
+  - type: alpaca

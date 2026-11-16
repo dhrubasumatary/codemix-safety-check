@@ -1,0 +1,12 @@
+{
+  "n": 80,
+  "pairs": 40,
+  "harmful": 40,
+  "harmless": 40,
+  "sha256": "a82f44e25c350acefbaac48767b8d6bb2c65240f4acaaa58dccdc07b7481a588",
+  "created_at": "2026-11-16T02:41:13.581793+00:00",
+  "method_frozen": "saved run2 wrapped.direction; RD alpha0.3; all layers; no retuning",
+  "generation": "greedy160 batch16",
+  "authorship": "assistant-authored, not native-speaker validated",
+  "purpose": "prospective separate validation; topics may overlap exploratory set"
+}
