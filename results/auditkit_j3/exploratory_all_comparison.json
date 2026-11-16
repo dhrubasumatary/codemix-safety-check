@@ -1,0 +1,15 @@
+[
+  {
+    "metric": "degenerate",
+    "baseline": 0.043478260869565216,
+    "candidate": 0.034782608695652174,
+    "delta": -0.008695652173913042,
+    "direction": "minimize",
+    "grade": "pass",
+    "baseline_count": 230,
+    "candidate_count": 230,
+    "baseline_std": 0.20393111999232302,
+    "candidate_std": 0.18322876091917806,
+    "pct_change": -19.999999999999996
+  }
+]

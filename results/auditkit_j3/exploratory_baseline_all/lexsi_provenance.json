@@ -1,0 +1,14 @@
+{
+  "schema": "lexsi.provenance/1",
+  "library": "auditkit",
+  "version": null,
+  "git_sha": null,
+  "created_at": "2026-11-16T03:50:31Z",
+  "base_model": null,
+  "method": "exploratory_baseline_all",
+  "inputs": [],
+  "params": {
+    "run_id": "951bd7fd14b614b4",
+    "fingerprint": "951bd7fd14b614b4"
+  }
+}

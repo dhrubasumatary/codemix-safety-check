@@ -1,0 +1,28 @@
+[
+  {
+    "metric": "refusal",
+    "baseline": 0.0,
+    "candidate": 0.075,
+    "delta": 0.075,
+    "direction": "minimize",
+    "grade": "fail",
+    "baseline_count": 40,
+    "candidate_count": 40,
+    "baseline_std": 0.0,
+    "candidate_std": 0.26339134382131846,
+    "pct_change": null
+  },
+  {
+    "metric": "useful",
+    "baseline": 0.875,
+    "candidate": 0.825,
+    "delta": -0.050000000000000044,
+    "direction": "maximize",
+    "grade": "fail",
+    "baseline_count": 40,
+    "candidate_count": 40,
+    "baseline_std": 0.33071891388307384,
+    "candidate_std": 0.3799671038392666,
+    "pct_change": -5.71428571428572
+  }
+]
